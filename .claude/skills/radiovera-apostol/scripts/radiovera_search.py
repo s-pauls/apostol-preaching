@@ -33,6 +33,15 @@ EM = "\u2014"
 ROMAN = [(10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")]
 
 
+# Windows: при выводе в канал/файл Python берёт локальную кодовую страницу (cp1251/cp1252),
+# и кириллица с ударениями вызывает UnicodeEncodeError. Принудительно используем UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 def to_roman(n: int) -> str:
     out = ""
     # поддержка глав до 399 (в посланиях глав меньше 30, но на всякий случай)

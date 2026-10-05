@@ -42,6 +42,15 @@ SKIP = {"script", "style", "noscript", "template", "svg"}
 MARK = "\x00ID:{}\x00"
 
 
+# Windows: при выводе в канал/файл Python берёт локальную кодовую страницу (cp1251/cp1252),
+# и кириллица с ударениями вызывает UnicodeEncodeError. Принудительно используем UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 def load_html(src: str) -> str:
     if re.match(r"^https?://", src):
         try:
@@ -154,7 +163,6 @@ def main():
         Path(args.out).write_text(text, encoding="utf-8")
         print(f"OK: {args.out} ({len(text)} символов)")
     else:
-        sys.stdout.reconfigure(encoding="utf-8")
         sys.stdout.write(text)
     return 0
 

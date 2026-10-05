@@ -7,11 +7,18 @@
 строку поиска для Радио Вера и доступность сайтов (необязательно, по сети).
 """
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 ROOT = Path(__file__).resolve().parent
 SK = ROOT / ".claude" / "skills"
@@ -26,8 +33,15 @@ def report(ok, text, hint=""):
 
 
 def run(*args):
+    env = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")  # корректный вывод кириллицы на Windows
     return subprocess.run([sys.executable, *map(str, args)], capture_output=True,
-                          text=True, encoding="utf-8", errors="replace", cwd=ROOT)
+                          text=True, encoding="utf-8", errors="replace", cwd=ROOT, env=env)
+
+
+def tail(text, n=500):
+    """Хвост сообщения об ошибке: в конце traceback стоит сама причина."""
+    text = (text or "").strip()
+    return text if len(text) <= n else "…" + text[-n:]
 
 
 # 1. Python
@@ -57,7 +71,7 @@ for s in ("apostol-zachalo", "apostol-chtenie-format", "radiovera-apostol", "pro
 
 # 5. поиск перевода
 r = run(SK / "apostol-chtenie-format" / "scripts" / "find_translation.py", "Гал.5:22-6:2")
-report(r.returncode == 0 and "[СИН]" in r.stdout, "поиск перевода зачала (Гал.5:22-6:2)", r.stderr.strip()[:200])
+report(r.returncode == 0 and "[СИН]" in r.stdout, "поиск перевода зачала (Гал.5:22-6:2)", tail(r.stderr))
 
 # 6. сборка EPUB
 sample = ROOT / "examples" / "sample_kindle.md"
@@ -65,11 +79,11 @@ with tempfile.TemporaryDirectory() as tmp:
     out = Path(tmp) / "t.epub"
     r = run(SK / "propoved-workflow" / "scripts" / "build_kindle_doc.py", sample, "--out", out)
     good = r.returncode == 0 and out.exists() and zipfile.is_zipfile(out)
-    report(good, "сборка EPUB из examples/sample_kindle.md", r.stderr.strip()[:200])
+    report(good, "сборка EPUB из examples/sample_kindle.md", tail(r.stderr))
 
 # 7. строка поиска для Радио Вера (без сети)
 r = run(SK / "radiovera-apostol" / "scripts" / "radiovera_search.py", "Гал. 5:22–6:2, зач. 213", "--dry-run")
-report(r.returncode == 0 and "213 зач." in r.stdout, "радио Вера: построение строки поиска (--dry-run)", r.stderr.strip()[:200])
+report(r.returncode == 0 and "213 зач." in r.stdout, "радио Вера: построение строки поиска (--dry-run)", tail(r.stderr))
 
 # 8. сеть (необязательно)
 print("\nПроверка сети (необязательная):")

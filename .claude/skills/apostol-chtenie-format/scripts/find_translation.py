@@ -28,6 +28,15 @@ from pathlib import Path
 MARK = "Перевод архимандрита Ианнуария"
 
 
+# Windows: при выводе в канал/файл Python берёт локальную кодовую страницу (cp1251/cp1252),
+# и кириллица с ударениями вызывает UnicodeEncodeError. Принудительно используем UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 def display_ref(ref: str) -> str:
     """Гал.5:22-6:2 -> гал 5:22–6:2 (нижний регистр, пробел после книги, длинное тире)."""
     s = ref.strip().strip("()").lower().replace("\u00a0", " ").replace("\u2009", " ")

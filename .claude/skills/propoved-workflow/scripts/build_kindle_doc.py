@@ -46,6 +46,15 @@ CONTAINER_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+# Windows: при выводе в канал/файл Python берёт локальную кодовую страницу (cp1251/cp1252),
+# и кириллица с ударениями вызывает UnicodeEncodeError. Принудительно используем UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 def inline(text: str) -> str:
     """Экранирует HTML и применяет **жирный** / *курсив*."""
     text = escape(text, quote=False)

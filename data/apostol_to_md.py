@@ -48,6 +48,15 @@ _LATIN2CYR = str.maketrans({"a": "а", "c": "с", "e": "е", "o": "о", "p": "р
                             "H": "Н", "B": "В", "M": "М", "K": "К"})
 
 
+# Windows: при выводе в канал/файл Python берёт локальную кодовую страницу (cp1251/cp1252),
+# и кириллица с ударениями вызывает UnicodeEncodeError. Принудительно используем UTF-8.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+
 def strip_acc(s: str) -> str:
     """Для сравнения: убирает ударения и заменяет латинские буквы-двойники на кириллические.
     В вывод не попадает — текст книги остаётся как есть."""
