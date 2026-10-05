@@ -12,7 +12,8 @@
  2. GET https://radiovera.ru/?s=<строка>&sorting=relevance
  3. Берутся только карточки, у которых текст <p class="excerpt"> НАЧИНАЕТСЯ с точной строки поиска.
  4. Из этих карточек забираются ссылки a.link-post, посты открываются,
-    из div.single-content берётся всё до <hr class="wp-block-separator ...">.
+    из div.single-content берётся всё до <hr class="wp-block-separator ...">
+    или, если его нет, до <div class="single__other-posts">.
  5. Результат пишется в один MD-файл: «# Вариант N» + текст поста.
 """
 import argparse
@@ -23,7 +24,7 @@ from pathlib import Path
 from urllib.parse import quote, urljoin
 
 import requests
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag, Comment
 
 BASE = "https://radiovera.ru/"
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; radiovera-apostol-skill/1.0)"}
@@ -156,19 +157,33 @@ VERSE_FMT = "**{n}**"  # как выводить номер стиха; напр
 RED = re.compile(r"#ff0000|rgb\(\s*255\s*,\s*0\s*,\s*0\s*\)|\bred\b", re.IGNORECASE)
 
 
+CHAPTER = re.compile(r"Глава\s+\d+\.?", re.IGNORECASE)
+
+
+def _text(node) -> str:
+    return node.get_text().replace(" ", " ").strip()
+
+
+def is_chapter_marker(node) -> bool:
+    """<p>Глава N.</p> - начало главы внутри зачала."""
+    return isinstance(node, Tag) and node.name == "p" and bool(CHAPTER.fullmatch(_text(node)))
+
+
 def is_verse_marker(node) -> bool:
-    """<span style="color: #ff0000;"><sup>N&nbsp;</sup></span> - номер стиха."""
+    """Номер стиха: <span style="color: #ff0000;">N</span> (с <sup> или без, с nbsp или без)
+    либо <p>Глава N.</p>."""
+    if is_chapter_marker(node):
+        return True
     return (
         isinstance(node, Tag)
         and node.name == "span"
         and bool(RED.search(node.get("style", "")))
-        and node.find("sup") is not None
-        and node.get_text().replace("\u00a0", " ").strip().isdigit()
+        and _text(node).isdigit()
     )
 
 
 def has_verses(node) -> bool:
-    return isinstance(node, Tag) and (is_verse_marker(node) or any(is_verse_marker(x) for x in node.find_all("span")))
+    return isinstance(node, Tag) and (is_verse_marker(node) or any(is_verse_marker(x) for x in node.find_all(["span", "p"])))
 
 
 def to_blockquote(text: str) -> str:
@@ -182,8 +197,9 @@ def inline_md(node) -> str:
         return ""
     name = node.name
     if is_verse_marker(node):
-        num = node.get_text().replace("\u00a0", " ").strip()
-        return " " + VERSE_FMT.format(n=num) + " "
+        if is_chapter_marker(node):
+            return f"**{_text(node)}**"
+        return " " + VERSE_FMT.format(n=_text(node)) + " "
     inner = "".join(inline_md(c) for c in node.children)
     if name in ("b", "strong") and inner.strip():
         return f"**{inner.strip()}**"
@@ -223,15 +239,38 @@ def block_md(node) -> str:
     return inline_md(node).strip()
 
 
+def _is_stop(tag) -> bool:
+    """Конец текста поста: hr.wp-block-separator, а если его нет - div.single__other-posts."""
+    if not isinstance(tag, Tag):
+        return False
+    classes = tag.get("class") or []
+    return (tag.name == "hr" and "wp-block-separator" in classes) \
+        or (tag.name == "div" and "single__other-posts" in classes)
+
+
+def _has_stop(tag) -> bool:
+    return tag.find("hr", class_="wp-block-separator") is not None \
+        or tag.find("div", class_="single__other-posts") is not None
+
+
+def _is_mixed_wrapper(tag) -> bool:
+    """div, в котором вперемешку стихи зачала и обычные абзацы (комментарий): иначе весь он
+    уйдёт в блок-цитату как «зачало»."""
+    return has_verses(tag) and any(
+        p for p in tag.find_all("p") if not has_verses(p) and _text(p)
+    )
+
+
 def _walk(container):
-    """Блоки поста по порядку; None - сигнал остановки (встретили hr-разделитель)."""
+    """Блоки поста по порядку; None - сигнал остановки (встретили разделитель)."""
     for child in container.children:
-        if isinstance(child, Tag) and child.name == "hr" and "wp-block-separator" in (child.get("class") or []):
+        if isinstance(child, Comment):  # <!-- ... --> и <!-- noindex -->, не текст поста
+            continue
+        if _is_stop(child):
             yield None
             return
-        if isinstance(child, Tag) and child.name in ("div", "section") \
-                and child.find("hr", class_="wp-block-separator") is not None:
-            # обёртка, внутри которой лежит разделитель - заходим внутрь
+        if isinstance(child, Tag) and child.name in ("div", "section")                 and (_has_stop(child) or _is_mixed_wrapper(child)):
+            # обёртка, внутри которой лежит разделитель или и зачало, и комментарий - заходим внутрь
             for x in _walk(child):
                 yield x
                 if x is None:
@@ -247,6 +286,8 @@ def extract_post_text(html: str) -> str:
     box = soup.select_one("div.single-content")
     if not box:
         raise RuntimeError("Не найден div.single-content")
+    for junk in box.select("div.single-share-box, figure.wp-block-image"):  # «Поделиться», картинки
+        junk.decompose()
     blocks = []  # (is_scripture, text)
     for child in _walk(box):
         if child is None:
