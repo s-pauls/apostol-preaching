@@ -324,7 +324,7 @@ def main():
     for n, url in enumerate(links, 1):
         print(f"  Вариант {n}: {url}")
         text = extract_post_text(get(url))
-        chunks.append(f"# Вариант {n}\n\n{text}\n")
+        chunks.append(f"# Вариант {n}\n\n[Посмотреть]({url})\n\n{text}\n")
         time.sleep(args.delay)
 
     out_dir = Path(args.out)
