@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/skills/:*)",
+      "Bash(python .claude/skills/:*)",
+      "WebFetch(domain:azbyka.ru)",
+      "WebFetch(domain:posledovania.ru)",
+      "WebFetch(domain:radiovera.ru)"
+    ]
+  }
+}

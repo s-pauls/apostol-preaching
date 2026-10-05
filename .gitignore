@@ -1,0 +1,12 @@
+# промежуточные и готовые файлы
+work/*
+!work/.gitkeep
+output/*
+!output/.gitkeep
+# кэш скрипта apostol_to_md.py
+data/cache/
+__pycache__/
+*.pyc
+.venv/
+# личное
+.claude/settings.local.json
